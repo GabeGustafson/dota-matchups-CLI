@@ -1,6 +1,8 @@
 import requests
 import json
 import string
+import fileinput
+
 
 # constants
 COUNTER_THRESHOLD = 0.43 # score threshold to be considered a counter to the hero
@@ -21,7 +23,7 @@ def init_dicts():
 
     # form the id to name dict with key, value pairs from the parsed file
     for hero_id_str in id_to_name_json:
-        hero_name = id_to_name_json[hero_id_str]["name"]
+        hero_name = id_to_name_json[hero_id_str]["localized_name"]
         hero_id = id_to_name_json[hero_id_str]["id"]
 
         id_to_name_dict[hero_id] = hero_name
@@ -60,7 +62,7 @@ def find_counters(matchups_data : list[dict]) -> (list[(int, float)], list[(int,
     return (countered_heroes, counter_heroes)
 
 
-def get_matchups(hero_id: int):
+def print_matchups(hero_id: int):
     url = OD_BASE_URL + OD_MATCHUPS_URL.replace("{hero_id}", str(hero_id))
 
     print("Obtaining data from: " + url)
@@ -79,26 +81,32 @@ def get_matchups(hero_id: int):
     countered, counters = find_counters(matchups_data)
 
     # print countered heroes
-    print("This hero is countered by:")
-    for countered_hero in countered:
-        print("\t" + str(countered_hero))
+    print("This hero counters:")
+    for countered_matchup in countered:
+        print_matchup(countered_matchup)
 
     # print counters
-    print("This hero counters:")
-    for counter_hero in counters:
-        print("\t" + str(counter_hero))
+    print("This hero is countered by:")
+    for counter_matchup in counters:
+        print_matchup(counter_matchup)
 
 
 # prints the info associated with the matchup argument
 def print_matchup(matchup: (int, float)):
     hero_name = id_to_name(matchup[0])
     winrate = matchup[1]
-    print("\t" + hero_name + ":\t" + winrate)
+    print("\t" + hero_name + ":\t" + "{:.2f}".format(winrate * 100) + "%")
 
 
 if __name__ == '__main__':
     print("Welcome to Dota 2 Counters.\n")
-    init_hero_names()
 
-    get_matchups(1)
+    # prepare hero name to id translating
+    init_dicts()
+
+    # give counter information for each hero name the user provides
+    print("Enter a hero to see counter relationships for: ")
+    for line in fileinput.input():
+        hero_id = name_to_id(line.rstrip())
+        print_matchups(hero_id)
 
