@@ -1,8 +1,8 @@
 import requests
 import json
-import string
 import fileinput
 
+from dota_constants import HeroTranslator
 
 # constants
 COUNTER_THRESHOLD = 0.43 # score threshold to be considered a counter to the hero
@@ -10,43 +10,13 @@ COUNTERED_THRESHOLD = 0.57 # score threshold to be considered countered by the h
 OD_BASE_URL = "https://api.opendota.com/api"
 OD_MATCHUPS_URL = "/heroes/{hero_id}/matchups"
 
-# hero name data, stored as dicts
-name_to_id_dict = {}  # lower case name to int id
-id_to_name_dict = {}  # int id to proper name
-
-
-# initializes the dict of hero names from the stored json file
-def init_dicts():
-    # load all hero info from a stored json file
-    hero_names_file = open("./heroes.json")
-    id_to_name_json = json.load(hero_names_file)
-
-    # form the id to name dict with key, value pairs from the parsed file
-    for hero_id_str in id_to_name_json:
-        hero_name = id_to_name_json[hero_id_str]["localized_name"]
-        hero_id = id_to_name_json[hero_id_str]["id"]
-
-        id_to_name_dict[hero_id] = hero_name
-
-    # form the name to id dict by reversing the key, value pairs of the first dict
-    for hero_id in id_to_name_dict:
-        hero_name = id_to_name_dict[hero_id].lower()
-        name_to_id_dict[hero_name] = hero_id
-
-
-def name_to_id(hero_name:str) -> int:
-    return name_to_id_dict[hero_name.lower()]
-
-
-def id_to_name(hero_id:int) -> str:
-    return id_to_name_dict[hero_id]
 
 
 # returns two lists of (hero, winrate) pairs.
 # The first list corresponds to heroes countered by the selected hero
 # and the second list corresponds to counters to the selected hero.
 # Both lists are sorted by counter significance.
-def find_counters(matchups_data : list[dict]) -> (list[(int, float)], list[(int, float)]):
+def find_counters(matchups_data: list[dict]) -> (list[(int, float)], list[(int, float)]):
     countered_heroes = []
     counter_heroes = []
 
@@ -62,7 +32,8 @@ def find_counters(matchups_data : list[dict]) -> (list[(int, float)], list[(int,
     return (countered_heroes, counter_heroes)
 
 
-def print_matchups(hero_id: int):
+# prints all matchups for the hero with the given id
+def print_matchups(hero_id: int, translator: HeroTranslator):
     url = OD_BASE_URL + OD_MATCHUPS_URL.replace("{hero_id}", str(hero_id))
 
     print("Obtaining data from: " + url)
@@ -83,30 +54,53 @@ def print_matchups(hero_id: int):
     # print countered heroes
     print("This hero counters:")
     for countered_matchup in countered:
-        print_matchup(countered_matchup)
+        print_matchup(countered_matchup, translator)
 
     # print counters
     print("This hero is countered by:")
     for counter_matchup in counters:
-        print_matchup(counter_matchup)
+        print_matchup(counter_matchup, translator)
 
 
 # prints the info associated with the matchup argument
-def print_matchup(matchup: (int, float)):
-    hero_name = id_to_name(matchup[0])
+def print_matchup(matchup: (int, float), translator: HeroTranslator):
+    hero_name = translator.id_to_name(matchup[0])
     winrate = matchup[1]
     print("\t" + hero_name + ":\t" + "{:.2f}".format(winrate * 100) + "%")
 
 
+# runs one iteration of the command line input loop, calling the
+# user's desired command and providing feedback.
+# Returns true if the command loop should keep running, false otherwise.
+def input_iteration(translator: HeroTranslator) -> bool:
+    # take and format user input
+    line = input("Enter a command (x to exit): ")
+    user_input = line.rstrip().lower()
+
+    if user_input == "x":  # return false, end of command loop
+        return False
+    elif user_input == "names":  # get all hero names
+        translator.print_names()
+    else:  # print matchups for the given hero
+        hero_id = translator.name_to_id(user_input)
+
+        if hero_id is not None:
+            print_matchups(hero_id, translator)
+        else:
+            print("Hero not found...")
+
+    return True
+
+
 if __name__ == '__main__':
     print("Welcome to Dota 2 Counters.\n")
+    print("Enter a hero name to see their counters or enter 'names' to see a list of all hero names\n")
 
     # prepare hero name to id translating
-    init_dicts()
+    translator = HeroTranslator()
 
-    # give counter information for each hero name the user provides
-    print("Enter a hero to see counter relationships for: ")
-    for line in fileinput.input():
-        hero_id = name_to_id(line.rstrip())
-        print_matchups(hero_id)
+    # maintain the input loop until the user enters "x"
+    maintain_input = True
+    while maintain_input:
+        maintain_input = input_iteration(translator)
 
