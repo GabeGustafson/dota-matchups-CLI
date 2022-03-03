@@ -1,13 +1,18 @@
 from dota_constants import HeroTranslator
 from modes import Mode
-from counter_parsing import CounterParser
+from counter_parsing import CounterPrinter
 
+
+# Allows the user to change the mode of obtaining counters (webscraping, API, etc.)
+#
+def mode_menu(counter_print: CounterPrinter):
+    counter_print.set_mode(Mode.DB_SCRAPE)  # TODO
 
 # runs one iteration of the command line input loop, calling the
 # user's desired command and providing feedback.
 # Returns true if the command loop should keep running, false otherwise.
 #
-def input_iteration(hero_trans, counter_parse:CounterParser) -> bool:
+def input_iteration(hero_trans, counter_print:CounterPrinter) -> bool:
     # take and format user input
     line = input("Enter a command (x to exit): ")
     user_input = line.strip().lower()
@@ -17,12 +22,12 @@ def input_iteration(hero_trans, counter_parse:CounterParser) -> bool:
     elif user_input == "names":  # get all hero names
         hero_trans.print_names()
     elif user_input == "modes":  # TODO allow the user to swap between modes
-        pass
+        mode_menu(counter_print)
     else:  # print matchups for the given hero
         hero_id = hero_trans.name_to_id(user_input)
 
         if hero_id is not None:
-            counter_parse.print_counters(hero_id)
+            counter_print.print_counters(hero_id)
         else:
             print("Hero not found...")
 
@@ -42,10 +47,9 @@ if __name__ == '__main__':
     translator = HeroTranslator()
 
     # prepare a counter parsing object with the default mode and our created translator
-    counter_parser = CounterParser(translator)
+    counter_printer = CounterPrinter(translator)
 
     # maintain the input loop until the user enters "x"
     maintain_input = True
     while maintain_input:
-        maintain_input = input_iteration(translator, counter_parser)
-
+        maintain_input = input_iteration(translator, counter_printer)

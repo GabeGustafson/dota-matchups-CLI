@@ -1,5 +1,7 @@
 import requests
 import json
+from bs4 import BeautifulSoup
+import re
 
 from dota_constants import HeroTranslator
 from modes import Mode
@@ -7,49 +9,104 @@ from modes import Mode
 # constants
 COUNTER_THRESHOLD = 0.40  # score threshold to be considered a counter to the hero
 COUNTERED_THRESHOLD = 0.60  # score threshold to be considered countered by the hero
-OD_BASE_URL = "https://api.opendota.com/api"
-OD_MATCHUPS_URL = "/heroes/{hero_id}/matchups"
+OD_API_URL = "https://api.opendota.com/api/heroes/{}/matchups"
+
+DB_SCRAPE_URL = "https://www.dotabuff.com/heroes/{}/counters"
 
 
-# This class contains a variety of methods for parsing counters using both APIs and
-# web-scraping techniques.
+# This class allows the printing of counters for a given hero.
+# The manner in which counters are obtained depends on the mode of the object.
 #
-class CounterParser():
-    def __init__(self, hero_trans, mode=Mode.OD_API):
+class CounterPrinter:
+    def __init__(self, hero_trans: HeroTranslator, mode=Mode.OD_API):
+        self._trans = hero_trans
+
         self._mode = mode
+        self._update_parser()  # create counter parser
+
+    # Changes the current mode (see modes.py)
+    #
+    def set_mode(self, new_mode):
+        self._mode = new_mode
+        self._update_parser()
+
+    # prints all matchups for the hero with the given id based on the currently assigned mode
+    #
+    def print_counters(self, hero_id: int):
+        # computes the counters and stores them based on the current mode
+        counters, countered = self._parser.compute_counters(hero_id)
+
+        # print countered heroes
+        print("This hero counters:")
+        self._print_matchup_list(countered)
+
+        # print counters
+        print("This hero is countered by:")
+        self._print_matchup_list(counters)
+
+    # prints all match-ups in the given list
+    #
+    def _print_matchup_list(self, matchup_list: list[(int, float)]):
+
+        for hero_id, winrate in matchup_list:
+            hero_name = self._trans.id_to_name(hero_id)
+            print("\t" + hero_name + ":\t" + "{:.2f}".format(winrate * 100) + "%")
+
+    # Creates a new parser for this object based on the current mode.
+    #
+    def _update_parser(self):
+        if self._mode is Mode.OD_API:
+            self._parser = ODAPIParser(self._trans)
+        elif self._mode is Mode.DB_SCRAPE:
+            self._parser = DBSCRAPEParser(self._trans)
+        elif self._mode is Mode.OD_SCRAPE:
+            self._parser = ODSCRAPEParser(self._trans)
+        else:
+            self._parser = None
+
+
+# This class defines an interface for parsing counters using both APIs and
+# web-scraping techniques. See children classes below for implementations.
+#
+class CounterParser:
+    def __init__(self, hero_trans: HeroTranslator):
         self._trans = hero_trans
 
         # establish where the most recently parsed counter information should be stored
         self.counters = []
         self.countered = []
 
-    # Sets the current mode (see modes.py)
+    # Obtains all matchups and then finds counters among them for the given hero id.
+    # These operations depend on the parser type (see implementations below).
     #
-    def set_mode(self, new_mode):
-        self._mode = new_mode
-
-    # prints all matchups for the hero with the given id based on the currently assigned mode
+    # Returns (list of countering heroes, list of countered heroes).
     #
-    def print_counters(self, hero_id: int):
-        self._compute_counters(hero_id)
+    def compute_counters(self, hero_id: int) -> (list, list):
+        matchups_data = self._get_matchups(hero_id)
 
-        # print countered heroes
-        print("This hero counters:")
-        self._print_matchup_list(self.countered)
+        self._find_counters(matchups_data)
 
-        # print counters
-        print("This hero is countered by:")
-        self._print_matchup_list(self.counters)
+        return self.counters, self.countered
 
-    # PRIVATE:
+    # ABSTRACT: Returns all matchups data for a given hero.
+    #
+    def _get_matchups(self, hero_id: int):
+        return None
+
+    # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
+    #
+    def _find_counters(self, matchups_data):
+        return
 
     # Attempts to return the webpage with requests.
     # Returns None on failure, and the page on success
     #
     def _get_page(self, url):
         # attempt to connect using a request
+        print("Obtaining data from: " + url)
         try:
-            matchups_page = requests.get(url)
+            # NOTE: Dotabuff gives code 429 (too many requests) if user agent is not specified.
+            matchups_page = requests.get(url, headers={'User-agent': 'GGPlzWork'})
 
             # check to see if the response code returned a page
             if not matchups_page:
@@ -62,9 +119,30 @@ class CounterParser():
 
         return matchups_page
 
-    # Helper function: Computes all counters based on matchups.
+
+# This class defines the functionality for parsing data from OpenDota's API.
+#
+class ODAPIParser(CounterParser):
+
+    # Returns all matchups as a list of dicts from a parsed JSON list.
     #
-    def _find_counters_OD_API(self, matchups_data: list[dict]) -> (list[(int, float)], list[(int, float)]):
+    def _get_matchups(self, hero_id: int) -> list[dict]:
+        # build the url to get the page with
+        url = OD_API_URL.format(str(hero_id))
+
+        # request the page, ensuring that it is valid
+        matchups_page = self._get_page(url)
+        if matchups_page is None:
+            return []
+
+        # parse the returned string (array of JSON objects) into a list of dictionaries
+        matchups_data = json.loads(matchups_page.text)
+
+        return matchups_data
+
+    # Initializes counters based on the raw winrate for each matchup.
+    #
+    def _find_counters(self, matchups_data: list[dict]) -> (list[(int, float)], list[(int, float)]):
         countered_heroes = []
         counter_heroes = []
 
@@ -77,47 +155,51 @@ class CounterParser():
             elif winrate <= COUNTER_THRESHOLD:
                 counter_heroes.append(matchup_info)
 
-        countered_heroes.sort(key=lambda p: p[1],
-                              reverse=True)  # sort by most significant countered heroes (best matchups first)
-        counter_heroes.sort(key=lambda p: p[1])  # sort by most significant counter heroes (worst matchups first)
+        countered_heroes.sort(key=lambda p: p[1], reverse=True)  # sort by best matchups first
+        counter_heroes.sort(key=lambda p: p[1])  # sort by worst matchups first
 
         self.countered = countered_heroes
         self.counters = counter_heroes
 
-    # Helper function: Returns all matchups.
+
+# TODO This class defines the functionality for web-scraping Dotabuff.com.
+#
+class DBSCRAPEParser(CounterParser):
+    # ABSTRACT: Returns all matchups data for a given hero.
     #
-    def _get_matchups_OD_API(self, hero_id: int):
-        # build the url to get the page with
-        url = OD_BASE_URL + OD_MATCHUPS_URL.replace("{hero_id}", str(hero_id))
+    def _get_matchups(self, hero_id: int):
+        # get the matchups page, ensuring that its valid
+        hero_name = self._trans.id_to_name(hero_id).lower().replace(" ", "-")
+        matchups_page = self._get_page(DB_SCRAPE_URL.format(hero_name))
+        if matchups_page is None:
+            return None  # TODO
 
-        print("Obtaining data from: " + url)
+        # create a Soup object to parse the page with
+        matchups_soup = BeautifulSoup(matchups_page.content, 'html.parser')
 
-        # request the page and ensure that it is valid
-        matchups_page = self._get_page(url)
-        if self._get_page(url) is None:
-            return
+        # find the tags that give counter information
+        counter_tags = matchups_soup.find_all(class_="counter-outline")
 
-        # parse the returned string (array of JSON objects) into a list of dictionaries
-        matchups_data = json.loads(matchups_page.text)
+        # TODO navigate to children for both sections...
 
-        return matchups_data
+        print(len(counter_tags))
+        print(counter_tags)
 
-    # Obtains all matchups and then finds counters among them for the given hero id.
-    # These operations depend on the given mode.
+    # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
     #
-    def _compute_counters(self, hero_id: int):
+    def _find_counters(self, matchups_data):
+        return
 
-        # assess the current mode, then compute counters appropriately
-        if self._mode is Mode.OD_API:
-            matchups_data = self._get_matchups_OD_API(hero_id)
-            self._find_counters_OD_API(matchups_data)
-        else:
-            pass  # TODO other modes
 
-    # prints all match-ups in the given list
+# TODO This class defines the functionality for web-scraping OpenDota.com.
+#
+class ODSCRAPEParser(CounterParser):
+    # ABSTRACT: Returns all matchups data for a given hero.
     #
-    def _print_matchup_list(self, matchup_list: list[(int, float)]):
+    def _get_matchups(self, hero_id: int):
+        return None
 
-        for hero_id, winrate in matchup_list:
-            hero_name = self._trans.id_to_name(hero_id)
-            print("\t" + hero_name + ":\t" + "{:.2f}".format(winrate * 100) + "%")
+    # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
+    #
+    def _find_counters(self, matchups_data):
+        return

@@ -7,14 +7,20 @@ import json
 class HeroTranslator:
 
     # parses all hero data and loads it into member data
+    #
     def __init__(self):
         # hero name data, stored as dicts
         self._name_to_id_dict = {}  # lower case name to int id
         self._id_to_name_dict = {}  # int id to proper name
+        self._hero_names = [] # alphabetized list of hero names
 
         # load all hero info from a stored json file
-        hero_names_file = open("./heroes.json")
-        id_to_name_json = json.load(hero_names_file)
+        try:
+            with open("./heroes.json") as f:  # ensure that the file is closed if an exception is thrown
+                id_to_name_json = json.load(f)
+        except OSError:
+            print("System Error: Unable to read from heroes.json file")
+            return
 
         # form the id to name dict with key, value pairs from the parsed file
         for hero_id_str in id_to_name_json:
@@ -28,7 +34,13 @@ class HeroTranslator:
             hero_name = self._id_to_name_dict[hero_id].lower()
             self._name_to_id_dict[hero_name] = hero_id
 
+        # initialize the alphabetized list of hero names
+        for name in self._name_to_id_dict.keys():
+            self._hero_names.append(name)
+        self._hero_names.sort()
+
     # returns the id associated with the given name (None if no id is found)
+    #
     def name_to_id(self, hero_name: str) -> int:
         result = None
         if hero_name in self._name_to_id_dict:
@@ -44,8 +56,9 @@ class HeroTranslator:
 
         return result
 
-    # Prints the parsed names of all heroes
+    # Prints the parsed names of all heroes from the alphabetical list
+    #
     def print_names(self) -> None:
         print("Hero name list: ")
-        for name in self._name_to_id_dict.keys():
+        for name in self._hero_names:
             print("\t" + name)
