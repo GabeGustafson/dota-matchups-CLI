@@ -24,6 +24,10 @@ class CounterPrinter:
         self._mode = mode
         self._update_parser()  # create counter parser
 
+    @property
+    def mode(self):
+        return self._mode
+
     # Changes the current mode (see modes.py)
     #
     def set_mode(self, new_mode):
@@ -36,6 +40,9 @@ class CounterPrinter:
         # computes the counters and stores them based on the current mode
         counters, countered = self._parser.compute_counters(hero_id)
 
+        # print the semantics of the counter scoring system for this mode of parser
+        print(self._parser.describe_counters())
+
         # print countered heroes
         print("This hero counters:")
         self._print_matchup_list(countered)
@@ -44,13 +51,12 @@ class CounterPrinter:
         print("This hero is countered by:")
         self._print_matchup_list(counters)
 
-    # prints all match-ups in the given list
+    # prints all match-ups in the given list of hero_id, proportional score pairs.
     #
     def _print_matchup_list(self, matchup_list: list[(int, float)]):
-
-        for hero_id, winrate in matchup_list:
-            hero_name = self._trans.id_to_name(hero_id)
-            print("\t" + hero_name + ":\t" + "{:.2f}".format(winrate * 100) + "%")
+        for matchup_id, score in matchup_list:
+            hero_name = self._trans.id_to_name(matchup_id)
+            print("\t" + hero_name + ":\t" + "{:.2f}".format(score * 100) + "%")
 
     # Creates a new parser for this object based on the current mode.
     #
@@ -84,19 +90,25 @@ class CounterParser:
     def compute_counters(self, hero_id: int) -> (list, list):
         matchups_data = self._get_matchups(hero_id)
 
-        self._find_counters(matchups_data)
+        self._init_counters(matchups_data)
 
         return self.counters, self.countered
 
-    # ABSTRACT: Returns all matchups data for a given hero.
+    # ABSTRACT: Returns a string describing the way that counters are scored for this parser.
+    #
+    def describe_counters(self) -> str:
+        return ""
+
+    # ABSTRACT: Returns a group of data on matchups for a given hero.
     #
     def _get_matchups(self, hero_id: int):
-        return None
+        return []
 
     # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
     #
-    def _find_counters(self, matchups_data):
-        return
+    def _init_counters(self, matchups_data):
+        pass
+
 
     # Attempts to return the webpage with requests.
     # Returns None on failure, and the page on success
@@ -142,7 +154,7 @@ class ODAPIParser(CounterParser):
 
     # Initializes counters based on the raw winrate for each matchup.
     #
-    def _find_counters(self, matchups_data: list[dict]) -> (list[(int, float)], list[(int, float)]):
+    def _init_counters(self, matchups_data: list[dict]):
         countered_heroes = []
         counter_heroes = []
 
@@ -165,30 +177,65 @@ class ODAPIParser(CounterParser):
 # TODO This class defines the functionality for web-scraping Dotabuff.com.
 #
 class DBSCRAPEParser(CounterParser):
-    # ABSTRACT: Returns all matchups data for a given hero.
+    # Returns the matchups data for a given hero as a pair of lists for countered heroes and
+    # counter heroes respectively (using the bs4 web-scraping library).
     #
-    def _get_matchups(self, hero_id: int):
+    def _get_matchups(self, hero_id: int) -> (list, list):
+
+        # returns a list of matchups created from the group of bs4 tags
+        def _create_matchups_list(tags):
+            # parse each counter-hero tag into a name, score pair
+            result = []
+            for tag in tags[1:]:
+                data = tag.findAll("td")
+
+                if len(data) < 3:
+                    print("Error: Unable to parse Dotabuff.com")
+                    return []
+
+                hero_name = str(data[1].string)  # Note: Dotabuff fortunately uses the canonical names for heroes
+                hero_id = self._trans.name_to_id(hero_name)
+
+                score_data = list(data[2].children)  # convert children of the score tag to a list
+                hero_score = float(score_data[0][:-1]) / 100
+
+                result.append((hero_id, hero_score))
+
+            return result
+
         # get the matchups page, ensuring that its valid
         hero_name = self._trans.id_to_name(hero_id).lower().replace(" ", "-")
         matchups_page = self._get_page(DB_SCRAPE_URL.format(hero_name))
         if matchups_page is None:
-            return None  # TODO
+            return [], []
 
         # create a Soup object to parse the page with
         matchups_soup = BeautifulSoup(matchups_page.content, 'html.parser')
 
-        # find the tags that give counter information
-        counter_tags = matchups_soup.find_all(class_="counter-outline")
+        # find the two sections that show notable matchups
+        matchup_sections = matchups_soup.find_all(class_="counter-outline")
+        if len(matchup_sections) < 2:
+            print("Error: Unable to parse Dotabuff.com")
+            return [], []
 
-        # TODO navigate to children for both sections...
+        # find the tags that give matchup information
+        counter_section, countered_section = matchup_sections[0], matchup_sections[1]
+        countered_tags = countered_section.find_all("tr")
+        counter_tags = counter_section.find_all("tr")
 
-        print(len(counter_tags))
-        print(counter_tags)
+        # form and return the lists of matchups
+        countered_list = _create_matchups_list(countered_tags)
+        counter_list = _create_matchups_list(counter_tags)
 
-    # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
+        return countered_list, counter_list
+
+    # Initializes the counter member-lists based on the lists parsed using bs4.
     #
-    def _find_counters(self, matchups_data):
-        return
+    def _init_counters(self, matchups_data):
+        # simply unpack the matchup lists
+        self.countered, self.counters = matchups_data
+
+
 
 
 # TODO This class defines the functionality for web-scraping OpenDota.com.
@@ -201,5 +248,5 @@ class ODSCRAPEParser(CounterParser):
 
     # ABSTRACT: Initializes the counter member-lists based on the given matchups data.
     #
-    def _find_counters(self, matchups_data):
+    def _init_counters(self, matchups_data):
         return

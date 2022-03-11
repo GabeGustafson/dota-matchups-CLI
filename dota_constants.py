@@ -35,7 +35,7 @@ class HeroTranslator:
             self._name_to_id_dict[hero_name] = hero_id
 
         # initialize the alphabetized list of hero names
-        for name in self._name_to_id_dict.keys():
+        for name in self._id_to_name_dict.values():
             self._hero_names.append(name)
         self._hero_names.sort()
 
@@ -43,8 +43,9 @@ class HeroTranslator:
     #
     def name_to_id(self, hero_name: str) -> int:
         result = None
+        hero_name = hero_name.lower()
         if hero_name in self._name_to_id_dict:
-            result = self._name_to_id_dict[hero_name.lower()]
+            result = self._name_to_id_dict[hero_name]
 
         return result
 

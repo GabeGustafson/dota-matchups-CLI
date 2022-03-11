@@ -1,12 +1,28 @@
+import modes
 from dota_constants import HeroTranslator
 from modes import Mode
 from counter_parsing import CounterPrinter
 
 
-# Allows the user to change the mode of obtaining counters (webscraping, API, etc.)
+# Prints a menu that allows the user to change the mode for obtaining and analyzing counters
+# (webscraping, API, etc.)
 #
 def mode_menu(counter_print: CounterPrinter):
-    counter_print.set_mode(Mode.DB_SCRAPE)  # TODO
+    print("\nCurrent Mode:", counter_print.mode)
+    print()
+
+    print("Select one of the following modes for analyzing counters by entering the corresponding key:")
+    print("\t", Mode.DB_SCRAPE.name, "-", modes.describe_mode(Mode.DB_SCRAPE))
+    print("\t", Mode.OD_API.name, "-", modes.describe_mode(Mode.OD_API))
+
+    mode_input = input("\nEnter mode key: ")
+
+    if mode_input == Mode.DB_SCRAPE.name:
+        counter_print.set_mode(Mode.DB_SCRAPE)
+    elif mode_input == Mode.OD_API.name:
+        counter_print.set_mode(Mode.DB_SCRAPE)
+    else:
+        print("Unable to recognize: {}, please try again with a key from the list.".format(mode_input))
 
 # runs one iteration of the command line input loop, calling the
 # user's desired command and providing feedback.
