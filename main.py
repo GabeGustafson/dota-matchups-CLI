@@ -1,3 +1,7 @@
+# Author: Gabriel Gustafson
+#
+# Note: the heroes.json file was obtained from the one built at https://github.com/odota/dotaconstants
+
 import modes
 from dota_constants import HeroTranslator
 from modes import Mode
@@ -8,7 +12,7 @@ from counter_parsing import CounterPrinter
 # (webscraping, API, etc.)
 #
 def mode_menu(counter_print: CounterPrinter):
-    print("\nCurrent Mode:", counter_print.mode)
+    print("\nCurrent Mode:", counter_print.mode.name)
     print()
 
     print("Select one of the following modes for analyzing counters by entering the corresponding key:")
@@ -20,7 +24,7 @@ def mode_menu(counter_print: CounterPrinter):
     if mode_input == Mode.DB_SCRAPE.name:
         counter_print.set_mode(Mode.DB_SCRAPE)
     elif mode_input == Mode.OD_API.name:
-        counter_print.set_mode(Mode.DB_SCRAPE)
+        counter_print.set_mode(Mode.OD_API)
     else:
         print("Unable to recognize: {}, please try again with a key from the list.".format(mode_input))
 
@@ -30,14 +34,14 @@ def mode_menu(counter_print: CounterPrinter):
 #
 def input_iteration(hero_trans, counter_print:CounterPrinter) -> bool:
     # take and format user input
-    line = input("Enter a command (x to exit): ")
+    line = input("\nEnter a command (x to exit): ")
     user_input = line.strip().lower()
 
     if user_input == "x":  # return false, end of command loop
         return False
     elif user_input == "names":  # get all hero names
         hero_trans.print_names()
-    elif user_input == "modes":  # TODO allow the user to swap between modes
+    elif user_input == "modes":
         mode_menu(counter_print)
     else:  # print matchups for the given hero
         hero_id = hero_trans.name_to_id(user_input)
@@ -57,7 +61,6 @@ if __name__ == '__main__':
     print("\tEnter a hero name to see their counters.")
     print("\tEnter 'names' to see a list of all hero names.")
     print("\tEnter 'modes' to see different ways of getting counter information (web-scraping vs. API usage).")
-    print()
 
     # prepare hero name to id translating
     translator = HeroTranslator()

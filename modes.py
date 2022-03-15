@@ -15,9 +15,9 @@ class Mode(Enum):
 #
 def describe_mode(mode: Mode):
     if mode == Mode.DB_SCRAPE:
-        return "Obtain advantage-scores for public matches from Dotabuff (with web-scraping techniques)"
+        return "Obtain advantage-scores in public matches from Dotabuff (with web-scraping techniques)"
     elif mode == Mode.OD_API:
-        return "Obtain raw winrates for professional matches from OpenDota (with the OpenDota API)"
+        return "Obtain raw winrates in professional matches from OpenDota (with the OpenDota API)"
     elif mode == Mode.OD_SCRAPE:
         return ""  # TODO
     else:

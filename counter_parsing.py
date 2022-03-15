@@ -7,10 +7,11 @@ from dota_constants import HeroTranslator
 from modes import Mode
 
 # constants
-COUNTER_THRESHOLD = 0.40  # score threshold to be considered a counter to the hero
-COUNTERED_THRESHOLD = 0.60  # score threshold to be considered countered by the hero
-OD_API_URL = "https://api.opendota.com/api/heroes/{}/matchups"
+COUNTER_THRESHOLD = 0.40  # winrate threshold to be considered a counter to the hero
+COUNTERED_THRESHOLD = 0.60  # winrate threshold to be considered countered by the hero
+MIN_GAMES = 10  # minimum number of games played to be considered a valid statistic
 
+OD_API_URL = "https://api.opendota.com/api/heroes/{}/matchups"
 DB_SCRAPE_URL = "https://www.dotabuff.com/heroes/{}/counters"
 
 
@@ -18,7 +19,7 @@ DB_SCRAPE_URL = "https://www.dotabuff.com/heroes/{}/counters"
 # The manner in which counters are obtained depends on the mode of the object.
 #
 class CounterPrinter:
-    def __init__(self, hero_trans: HeroTranslator, mode=Mode.OD_API):
+    def __init__(self, hero_trans: HeroTranslator, mode=Mode.DB_SCRAPE):
         self._trans = hero_trans
 
         self._mode = mode
@@ -42,6 +43,7 @@ class CounterPrinter:
 
         # print the semantics of the counter scoring system for this mode of parser
         print(self._parser.describe_counters())
+        print()
 
         # print countered heroes
         print("This hero counters:")
@@ -82,6 +84,11 @@ class CounterParser:
         self.counters = []
         self.countered = []
 
+    # ABSTRACT: Returns a string describing the way that counters are scored for this parser.
+    #
+    def describe_counters(self) -> str:
+        return ""
+
     # Obtains all matchups and then finds counters among them for the given hero id.
     # These operations depend on the parser type (see implementations below).
     #
@@ -93,11 +100,6 @@ class CounterParser:
         self._init_counters(matchups_data)
 
         return self.counters, self.countered
-
-    # ABSTRACT: Returns a string describing the way that counters are scored for this parser.
-    #
-    def describe_counters(self) -> str:
-        return ""
 
     # ABSTRACT: Returns a group of data on matchups for a given hero.
     #
@@ -136,6 +138,11 @@ class CounterParser:
 #
 class ODAPIParser(CounterParser):
 
+    # Returns a string describing the way that counters are scored for this parser.
+    #
+    def describe_counters(self) -> str:
+        return "FORMAT: Hero Matchup, Winrate"
+
     # Returns all matchups as a list of dicts from a parsed JSON list.
     #
     def _get_matchups(self, hero_id: int) -> list[dict]:
@@ -162,10 +169,11 @@ class ODAPIParser(CounterParser):
             winrate = matchup["wins"] / matchup["games_played"]
             matchup_info = (matchup["hero_id"], winrate)
 
-            if winrate >= COUNTERED_THRESHOLD:
-                countered_heroes.append(matchup_info)
-            elif winrate <= COUNTER_THRESHOLD:
-                counter_heroes.append(matchup_info)
+            if matchup["games_played"] >= MIN_GAMES:
+                if winrate >= COUNTERED_THRESHOLD:
+                    countered_heroes.append(matchup_info)
+                elif winrate <= COUNTER_THRESHOLD:
+                    counter_heroes.append(matchup_info)
 
         countered_heroes.sort(key=lambda p: p[1], reverse=True)  # sort by best matchups first
         counter_heroes.sort(key=lambda p: p[1])  # sort by worst matchups first
@@ -177,11 +185,15 @@ class ODAPIParser(CounterParser):
 # TODO This class defines the functionality for web-scraping Dotabuff.com.
 #
 class DBSCRAPEParser(CounterParser):
+    # Returns a string describing the way that counters are scored for this parser.
+    #
+    def describe_counters(self) -> str:
+        return "FORMAT: Hero Matchup, Advantage Percentage"
+
     # Returns the matchups data for a given hero as a pair of lists for countered heroes and
     # counter heroes respectively (using the bs4 web-scraping library).
     #
     def _get_matchups(self, hero_id: int) -> (list, list):
-
         # returns a list of matchups created from the group of bs4 tags
         def _create_matchups_list(tags):
             # parse each counter-hero tag into a name, score pair
@@ -241,6 +253,11 @@ class DBSCRAPEParser(CounterParser):
 # TODO This class defines the functionality for web-scraping OpenDota.com.
 #
 class ODSCRAPEParser(CounterParser):
+    # ABSTRACT: Returns a string describing the way that counters are scored for this parser.
+    #
+    def describe_counters(self) -> str:
+        return ""
+
     # ABSTRACT: Returns all matchups data for a given hero.
     #
     def _get_matchups(self, hero_id: int):
