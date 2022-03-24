@@ -3,8 +3,8 @@
 # Note: the heroes.json file was obtained from the one built at https://github.com/odota/dotaconstants
 
 import modes
-from dota_constants import HeroTranslator
 from modes import Mode
+from dota_constants import HeroTranslator
 from counter_parsing import CounterPrinter
 
 
@@ -55,7 +55,7 @@ def input_iteration(hero_trans, counter_print:CounterPrinter) -> bool:
 
 
 if __name__ == '__main__':
-    print("Welcome to the Dota 2 Counters App!\n")
+    print("Welcome to the Dota 2 Matchups App!\n")
 
     print("Instructions:")
     print("\tEnter a hero name to see their counters.")
