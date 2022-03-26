@@ -1,5 +1,6 @@
 # Dota Matchups App
 A command line interface app for obtaining basic counter information on Dota 2 heroes.
+
 This app supports a choice of data-gathering methods (including web-scraping and API usage).
 
 ## Using the app
