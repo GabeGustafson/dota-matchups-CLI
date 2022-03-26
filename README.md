@@ -15,7 +15,7 @@ DotaBuff.com web-scraping example:
 
 ![Dotabuff Website Image](./demo_images/DB_web_counters.png)
 
-![Dotabuff CLI Image](./demo_images/DB_counters.png)
+![Dotabuff CLI Image](./demo_images/DB_cli_counters.png)
 
 
 
